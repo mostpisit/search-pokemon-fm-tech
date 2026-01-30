@@ -1,18 +1,8 @@
+import React, { Suspense } from "react";
 import SearchInput from "@/components/SearchInput";
 import PokemonResult from "@/components/PokemonResult";
 
-/**
- * Home Page
- *
- * Route: /
- * Query params: ?q=pokemon-name
- *
- * Features:
- * - Apollo Client caching for all queries
- * - Responsive layout optimized for mobile and desktop
- * - Dark mode support
- * - Clean separation of search and result components
- */
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 dark:from-gray-900 dark:to-gray-800">
@@ -29,8 +19,13 @@ export default function Home() {
 
         {/* Content Card */}
         <div className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800 sm:p-8">
-          <SearchInput />
-          <PokemonResult />
+          <Suspense fallback={<div className="py-6">Loading search…</div>}>
+            <SearchInput />
+          </Suspense>
+
+          <Suspense fallback={<div className="py-6">Loading results…</div>}>
+            <PokemonResult />
+          </Suspense>
         </div>
 
 
