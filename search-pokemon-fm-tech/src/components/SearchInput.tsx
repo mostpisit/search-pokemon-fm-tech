@@ -6,14 +6,8 @@ import { useSearchPokemon } from "@/hooks/usePokemonSearch";
 import { addToSearchHistory, getSearchHistory } from "@/lib/storage";
 
 /**
- * SearchInput Component
- *
- * Features:
- * - Reads/writes search value to URL query param (?q=)
- * - Debounced Apollo Client search with caching
- * - Keyboard navigation (arrow keys, enter, escape)
- * - Search history from localStorage
- * - Graceful error handling
+ * SearchInput Component - Beautiful Redesign
+ * Aesthetic: Modern glassmorphism with vibrant gradients and smooth micro-interactions
  */
 export default function SearchInput() {
   const router = useRouter();
@@ -25,25 +19,24 @@ export default function SearchInput() {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [showHistory, setShowHistory] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout>();
   const isEvolutionClickRef = useRef<boolean>(false);
+  const isSuggestionSelectedRef = useRef<boolean>(false);
+  const suggestionsRef = useRef<HTMLUListElement>(null);
 
-  // Fetch suggestions via Apollo (with caching)
   const { suggestions, loading, error } = useSearchPokemon(value);
 
-  // Sync URL with input value on initial load
   useEffect(() => {
     setValue(initial);
   }, [initial]);
 
-  // Load search history on mount
   useEffect(() => {
     const history = getSearchHistory();
     setSearchHistory(history.map((item) => item.query));
   }, []);
 
-  // Listen for evolution clicks (dispatched by PokemonResult) to update input and hide suggestions
   useEffect(() => {
     function onEvolution(e: any) {
       const name = e?.detail?.name ?? e?.detail;
@@ -53,7 +46,6 @@ export default function SearchInput() {
       }
       setShowSuggestions(false);
       setShowHistory(false);
-      // blur the input so dropdown won't reopen immediately
       inputRef.current?.blur();
     }
 
@@ -67,11 +59,16 @@ export default function SearchInput() {
     };
   }, []);
 
-  // Show/hide suggestions when they update
   useEffect(() => {
-    // Don't show suggestions if we just came from an evolution click
     if (isEvolutionClickRef.current) {
       isEvolutionClickRef.current = false;
+      setShowSuggestions(false);
+      setShowHistory(false);
+      return;
+    }
+
+    if (isSuggestionSelectedRef.current) {
+      isSuggestionSelectedRef.current = false;
       setShowSuggestions(false);
       setShowHistory(false);
       return;
@@ -85,7 +82,6 @@ export default function SearchInput() {
     }
   }, [suggestions, value]);
 
-  // Debounced URL update (350ms)
   useEffect(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -98,11 +94,6 @@ export default function SearchInput() {
       if ((searchParams?.get("q") ?? "") !== trimmed) {
         router.push(url);
       }
-
-      // Add to history when search is triggered
-      if (trimmed) {
-        addToSearchHistory(trimmed);
-      }
     }, 350);
 
     return () => {
@@ -113,11 +104,21 @@ export default function SearchInput() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
+  useEffect(() => {
+    if (selectedIndex >= 0 && suggestionsRef.current) {
+      const selectedElement = suggestionsRef.current.children[selectedIndex] as HTMLElement;
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+  }, [selectedIndex]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       const displayItems = showHistory ? searchHistory : suggestions;
 
-      if (!showSuggestions) return;
+      if (displayItems.length === 0) return;
+      if (!showSuggestions && !showHistory) return;
 
       switch (e.key) {
         case "ArrowDown":
@@ -132,7 +133,17 @@ export default function SearchInput() {
           e.preventDefault();
           if (selectedIndex >= 0) {
             const selected = displayItems[selectedIndex];
-            setValue(selected);
+            addToSearchHistory(selected);
+            setShowSuggestions(false);
+            setShowHistory(false);
+            setSelectedIndex(-1);
+            isSuggestionSelectedRef.current = true;
+            // Navigate directly to avoid flicker
+            const url = `/?q=${encodeURIComponent(selected)}`;
+            router.push(url);
+          } else if (value.trim()) {
+            // ถ้าไม่มี selection แต่มี value ให้บันทึก history และ blur
+            addToSearchHistory(value.trim());
             setShowSuggestions(false);
             setShowHistory(false);
             inputRef.current?.blur();
@@ -142,26 +153,33 @@ export default function SearchInput() {
           e.preventDefault();
           setShowSuggestions(false);
           setShowHistory(false);
+          setSelectedIndex(-1);
           break;
         default:
           break;
       }
     },
-    [showSuggestions, selectedIndex, suggestions, searchHistory, showHistory]
+    [showSuggestions, showHistory, selectedIndex, suggestions, searchHistory]
   );
 
   const handleSuggestionClick = useCallback((suggestion: string) => {
-    setValue(suggestion);
+    addToSearchHistory(suggestion);
     setShowSuggestions(false);
     setShowHistory(false);
-  }, []);
+    setSelectedIndex(-1);
+    isSuggestionSelectedRef.current = true;
+    // Navigate directly to avoid double setState
+    const url = `/?q=${encodeURIComponent(suggestion)}`;
+    router.push(url);
+  }, [router]);
 
   const handleFocus = () => {
+    setIsFocused(true);
+    setSelectedIndex(-1);
     if (!value.trim()) {
       setShowHistory(searchHistory.length > 0);
       setShowSuggestions(false);
     } else {
-      // Show suggestions immediately if we have any
       if (suggestions.length > 0) {
         setShowSuggestions(true);
         setShowHistory(false);
@@ -169,64 +187,186 @@ export default function SearchInput() {
     }
   };
 
+  const handleBlur = () => {
+    setIsFocused(false);
+    setTimeout(() => {
+      setShowSuggestions(false);
+      setShowHistory(false);
+      setSelectedIndex(-1);
+    }, 200);
+  };
+
+  const handleClear = useCallback(() => {
+    setValue("");
+    setShowSuggestions(false);
+    setShowHistory(false);
+    setSelectedIndex(-1);
+    inputRef.current?.focus();
+  }, []);
+
   const displayItems = useMemo(() => {
     if (showHistory) return searchHistory;
     return suggestions;
   }, [showHistory, searchHistory, suggestions]);
 
+  const hasContent = value.trim().length > 0;
+  const showDropdown = (showHistory || (showSuggestions && displayItems.length > 0));
+
   return (
-    <div className="relative w-full">
-      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Search Pokémon
-      </label>
+    <div className="relative w-full max-w-3xl mx-auto">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes dropdown-slide {
+          from {
+            opacity: 0;
+            transform: translateY(-10px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .dropdown-enter {
+          animation: dropdown-slide 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .suggestion-item {
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .suggestion-item:hover {
+          transform: translateX(4px);
+        }
+
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+      `}} />
+
       <div className="relative">
-        <input
-          ref={inputRef}
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            setSelectedIndex(-1);
-          }}
-          onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
-          onBlur={() => {
-            // Hide suggestions after a short delay to allow click handlers to fire
-            setTimeout(() => {
-              setShowSuggestions(false);
-              setShowHistory(false);
-            }, 150);
-          }}
-          placeholder="e.g. Pikachu"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-        />
-        {loading && (
-          <div className="absolute right-3 top-2 text-xs text-gray-400">
-            <span className="animate-pulse">Searching...</span>
+        {/* Input container with glassmorphism */}
+        <div className={`
+          relative overflow-hidden rounded-2xl backdrop-blur-xl
+          bg-gradient-to-br from-white/90 to-white/70
+          dark:from-gray-800/90 dark:to-gray-900/70
+          shadow-2xl shadow-indigo-500/10 dark:shadow-indigo-500/5
+          transition-all duration-500
+          ${isFocused ? 'scale-[1.02] ring-2 ring-indigo-500/50' : 'border border-white/20 dark:border-gray-700/50'}
+        `}>
+
+          <div className="relative flex items-center gap-3 px-6 py-4">
+            {/* Search Icon */}
+            <div className={`flex-shrink-0 transition-all duration-500 ${isFocused ? 'text-indigo-600 dark:text-indigo-400 scale-110' : 'text-gray-400 dark:text-gray-500'}`}>
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </div>
+
+            {/* Input */}
+            <input
+              ref={inputRef}
+              type="text"
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                setSelectedIndex(-1);
+              }}
+              onKeyDown={handleKeyDown}
+              onFocus={handleFocus}
+              onBlur={handleBlur}
+              placeholder="Search for Pokémon..."
+              className="flex-1 bg-transparent border-none outline-none text-lg font-medium text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              style={{ caretColor: '#6366f1' }}
+            />
+
+            {/* Status indicators */}
+            <div className="flex-shrink-0 flex items-center gap-3">
+              {/* Loading */}
+              {loading && (
+                <div className="relative">
+                  <div className="w-5 h-5 rounded-full border-2 border-indigo-200 dark:border-indigo-800" />
+                  <div className="absolute inset-0 w-5 h-5 rounded-full border-2 border-transparent border-t-indigo-500 dark:border-t-indigo-400 animate-spin" />
+                </div>
+              )}
+
+              {/* Error */}
+              {error && !loading && (
+                <div className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                  <svg className="w-3 h-3 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
+
+              {/* Clear button */}
+              {hasContent && !loading && (
+                <button
+                  type="button"
+                  onClick={handleClear}
+                  className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-300 dark:hover:bg-gray-600 transition-all hover:scale-110"
+                >
+                  <svg className="w-3 h-3 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Dropdown */}
+        {showDropdown && (
+          <div className="absolute top-full left-0 right-0 mt-3 z-50 dropdown-enter">
+            <div className="overflow-hidden rounded-2xl backdrop-blur-xl bg-white/95 dark:bg-gray-800/95 border border-gray-200/50 dark:border-gray-700/50 shadow-2xl shadow-indigo-500/10">
+              <ul
+                ref={suggestionsRef}
+                className="max-h-80 overflow-y-auto scrollbar-hide"
+                style={{
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                } as React.CSSProperties}
+              >
+                {displayItems.map((item, idx) => (
+                  <li
+                    key={`${item}-${idx}`}
+                    onClick={() => handleSuggestionClick(item)}
+                    className={`
+                      suggestion-item cursor-pointer px-6 py-4
+                      flex items-center gap-4
+                      border-b border-gray-100 dark:border-gray-700/50 last:border-b-0
+                      ${
+                        idx === selectedIndex
+                          ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg"
+                          : "hover:bg-gradient-to-r hover:from-gray-50 hover:to-white dark:hover:from-gray-700/30 dark:hover:to-gray-800/30 text-gray-900 dark:text-gray-100"
+                      }
+                    `}
+                  >
+                    {/* Icon */}
+                    <div className={`flex-shrink-0 text-xl ${idx === selectedIndex ? '' : 'opacity-50'}`}>
+                      {showHistory ? "⏱" : ""}
+                    </div>
+
+                    {/* Text */}
+                    <div className="flex-1 font-medium text-base capitalize">
+                      {item}
+                    </div>
+
+                    {/* Arrow */}
+                    {idx === selectedIndex && (
+                      <div className="flex-shrink-0">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                        </svg>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         )}
-        {error && !loading && (
-          <div className="absolute right-3 top-2 text-xs text-red-500">Error</div>
-        )}
       </div>
-
-      {/* Dropdown: Suggestions or History */}
-      {(showHistory || (showSuggestions && displayItems.length > 0)) && (
-        <ul className="absolute top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg z-10 dark:border-gray-600 dark:bg-gray-800">
-          {displayItems.map((item, idx) => (
-            <li
-              key={`${item}-${idx}`}
-              className={`cursor-pointer px-3 py-2 text-sm transition-colors ${
-                idx === selectedIndex
-                  ? "bg-blue-500 text-white"
-                  : "text-gray-900 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700"
-              }`}
-              onClick={() => handleSuggestionClick(item)}
-            >
-              {showHistory ? `🕐 ${item}` : item}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
