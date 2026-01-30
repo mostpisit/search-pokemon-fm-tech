@@ -27,6 +27,7 @@ export default function SearchInput() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout>();
+  const isEvolutionClickRef = useRef<boolean>(false);
 
   // Fetch suggestions via Apollo (with caching)
   const { suggestions, loading, error } = useSearchPokemon(value);
@@ -48,6 +49,7 @@ export default function SearchInput() {
       const name = e?.detail?.name ?? e?.detail;
       if (typeof name === "string") {
         setValue(name);
+        isEvolutionClickRef.current = true;
       }
       setShowSuggestions(false);
       setShowHistory(false);
@@ -67,6 +69,14 @@ export default function SearchInput() {
 
   // Show/hide suggestions when they update
   useEffect(() => {
+    // Don't show suggestions if we just came from an evolution click
+    if (isEvolutionClickRef.current) {
+      isEvolutionClickRef.current = false;
+      setShowSuggestions(false);
+      setShowHistory(false);
+      return;
+    }
+
     if (value.trim() && suggestions.length > 0) {
       setShowSuggestions(true);
       setShowHistory(false);
