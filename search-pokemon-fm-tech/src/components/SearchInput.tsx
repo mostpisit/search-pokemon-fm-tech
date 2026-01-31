@@ -204,6 +204,17 @@ export default function SearchInput() {
     inputRef.current?.focus();
   }, []);
 
+  const MAX_INPUT_LENGTH = 50;
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    // Limit input length to prevent crashes
+    if (newValue.length <= MAX_INPUT_LENGTH) {
+      setValue(newValue);
+      setSelectedIndex(-1);
+    }
+  }, []);
+
   const displayItems = useMemo(() => {
     if (showHistory) return searchHistory;
     return suggestions;
@@ -268,14 +279,12 @@ export default function SearchInput() {
               ref={inputRef}
               type="text"
               value={value}
-              onChange={(e) => {
-                setValue(e.target.value);
-                setSelectedIndex(-1);
-              }}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onFocus={handleFocus}
               onBlur={handleBlur}
               placeholder="Search for Pokémon..."
+              maxLength={MAX_INPUT_LENGTH}
               className="flex-1 bg-transparent border-none outline-none text-lg font-medium text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500"
               style={{ caretColor: '#6366f1' }}
             />
