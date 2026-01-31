@@ -95,7 +95,7 @@ export default function SearchInput() {
       if ((searchParams?.get("q") ?? "") !== trimmed) {
         router.push(url);
       }
-    }, 350);
+    }, 1000);
 
     return () => {
       if (debounceTimerRef.current) {

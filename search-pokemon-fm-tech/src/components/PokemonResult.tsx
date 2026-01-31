@@ -31,7 +31,7 @@ const PokemonResult = memo(function PokemonResult() {
           );
         }
       } catch (e) {
-        // ignore
+        console.error("Failed to dispatch evolution event:", e);
       }
 
       router.push(`/?q=${encodeURIComponent(evolutionName)}`);
